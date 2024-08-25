@@ -1,0 +1,8 @@
+# Ignore all files in the build folder
+build/*
+
+# Keep the build folder itself
+!build/
+
+# Ignore the entire .vscode folder
+.vscode/
