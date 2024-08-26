@@ -1,15 +1,9 @@
-cmake_minimum_required(VERSION 3.10)
-project(SOME_IP_Testing)
+cmake_minimum_required (VERSION 3.13)
 
-set(CMAKE_CXX_STANDARD 17)
+set (CMAKE_CXX_FLAGS "-g -std=c++0x")
 
-include_directories(${CMAKE_SOURCE_DIR}/server ${CMAKE_SOURCE_DIR}/client)
-
-# Build the server executable
-add_executable(server server/server.cpp)
-
-# Build the client executable
-add_executable(client client/client.cpp)
-
-# Link the client directly with the server's object file
-target_link_libraries(client PRIVATE server/server.cpp)
+find_package (vsomeip3 3.4.10 REQUIRED)
+find_package( Boost 1.55 COMPONENTS system thread log REQUIRED )
+set(ROOT_PATH ${CMAKE_CURRENT_SOURCE_DIR})
+add_subdirectory(src/service)
+add_subdirectory(src/routingmanagerd)
