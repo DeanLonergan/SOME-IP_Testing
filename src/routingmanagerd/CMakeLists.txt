@@ -22,7 +22,4 @@ if (VSOMEIP_INSTALL_ROUTINGMANAGERD)
     )
 endif()
 
-export  VSOMEIP_CONFIGURATION=SOMEJSON ifnot defined then X -> /etc/vsomeip.json
-
-
 ###################################################################################################
