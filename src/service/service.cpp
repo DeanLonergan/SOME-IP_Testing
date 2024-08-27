@@ -7,12 +7,14 @@
 #define SERVICE_ID 0x1234
 #define INSTANCE_ID 0x5678
 #define METHOD_ID 0x0421
+#define EVENTGROUP_ID 0x4465
+#define EVENT_ID 0x8778
 
 std::shared_ptr<vsomeip::application> app;
+std::shared_ptr<vsomeip::payload> payload;
 
 void on_message(const std::shared_ptr<vsomeip::message> &_request)
 {
-
     std::shared_ptr<vsomeip::payload> its_payload = _request->get_payload();
     vsomeip::length_t l = its_payload->get_length();
 
@@ -44,10 +46,14 @@ void on_message(const std::shared_ptr<vsomeip::message> &_request)
 
 int main()
 {
-
     app = vsomeip::runtime::get()->create_application("World");
     app->init();
     app->register_message_handler(SERVICE_ID, INSTANCE_ID, METHOD_ID, on_message);
     app->offer_service(SERVICE_ID, INSTANCE_ID);
     app->start();
+
+    std::set<vsomeip::eventgroup_t> its_groups;
+    its_groups.insert(EVENTGROUP_ID);
+    app->offer_event(SERVICE_ID, INSTANCE_ID, EVENT_ID, its_groups);
+    app->notify(SERVICE_ID, INSTANCE_ID, EVENT_ID, payload);
 }
