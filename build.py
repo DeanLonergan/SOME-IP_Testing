@@ -37,7 +37,7 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     build_root_dir = os.path.join(script_dir, "build")
     src_dir = os.path.join(script_dir, "src")
-
+   
     print("Starting build process...")
 
     # Clean the main build directory
@@ -50,7 +50,7 @@ def main():
         source_dir = os.path.join(src_dir, component)
         component_build_dir = os.path.join(build_root_dir, component)
 
-        print(f"Building component: {component}")
+        print(f"\nBuilding component: {component}")
         run_cmake_and_make(component_build_dir, source_dir)
 
     print("Build process finished.")
