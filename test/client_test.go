@@ -2,141 +2,92 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cucumber/godog"
 )
 
-var clientCmd, serviceCmd, routingManagerCmd *exec.Cmd
-var clientStarted, serviceRunning, routingManagerRunning bool
-var subscriptionSuccessful bool
-var expectedOutput string
-var clientOutputBuffer, serviceOutputBuffer, routingManagerOutputBuffer bytes.Buffer
+// Global variables to store command references and their output buffers
+var (
+	clientCmd, serviceCmd, routingManagerCmd          *exec.Cmd
+	clientOutput, serviceOutput, routingManagerOutput bytes.Buffer
+)
 
-// Function to run a command in the background and capture its output
-func runCommandWithOutputCapture(command string, outputBuffer *bytes.Buffer, args ...string) (*exec.Cmd, error) {
+// runCommand starts a command with the given arguments and captures its output in the provided buffer.
+func runCommand(command string, output *bytes.Buffer, args ...string) (*exec.Cmd, error) {
 	cmd := exec.Command(command, args...)
-	cmd.Stdout = outputBuffer
-	cmd.Stderr = outputBuffer
-	err := cmd.Start()
-	return cmd, err
+	cmd.Stdout = output
+	cmd.Stderr = output
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start %s: %w", command, err)
+	}
+	return cmd, nil
 }
 
-// Step definition to ensure the routingmanagerd is running in the background
+// theRoutingManagerIsRunning ensures that the routing manager is running.
 func theRoutingManagerIsRunning() error {
 	fmt.Println("Starting routing manager in the background...")
-	var err error
-	routingManagerCmd, err = runCommandWithOutputCapture("../build/routingmanagerd/routingmanagerd", &routingManagerOutputBuffer)
+	cmd, err := runCommand("../build/routingmanagerd/routingmanagerd", &routingManagerOutput)
 	if err != nil {
-		return fmt.Errorf("could not start routing manager: %v", err)
+		return err
 	}
-	routingManagerRunning = true
+	routingManagerCmd = cmd
+	time.Sleep(2 * time.Second) // Allow time for initialization
 
-	// Give the routing manager a moment to initialize
-	time.Sleep(2 * time.Second)
-
+	if !bytes.Contains(routingManagerOutput.Bytes(), []byte("Instantiating routing manager [Host]")) {
+		return fmt.Errorf("routing manager failed to start as Host: %s", routingManagerOutput.String())
+	}
 	return nil
 }
 
-// Step definition to ensure the service is running in the background
+// theServiceIsRunning ensures that the service is running.
 func theServiceIsRunning() error {
-	if !routingManagerRunning {
-		return fmt.Errorf("routing manager is not running")
-	}
-
 	fmt.Println("Starting service in the background...")
-	var err error
-	serviceCmd, err = runCommandWithOutputCapture("../build/service/service", &serviceOutputBuffer)
+	cmd, err := runCommand("../build/service/service", &serviceOutput)
 	if err != nil {
-		return fmt.Errorf("could not start service: %v", err)
+		return err
 	}
-	serviceRunning = true
-
-	// Give the service a moment to initialize
-	time.Sleep(2 * time.Second)
-
+	serviceCmd = cmd
+	time.Sleep(2 * time.Second) // Allow time for initialization
 	return nil
 }
 
-// Step definition to start the client application and capture its output
+// theClientApplicationStarts starts the client application and captures its output.
 func theClientApplicationStarts() error {
-	if !serviceRunning {
-		return fmt.Errorf("service is not running")
-	}
-
-	fmt.Println("Waiting for routing manager and service to fully start...")
-	time.Sleep(5 * time.Second)
-
 	fmt.Println("Starting client...")
-	var err error
-	clientCmd, err = runCommandWithOutputCapture("../build/client/client", &clientOutputBuffer)
+	cmd, err := runCommand("../build/client/client", &clientOutput)
 	if err != nil {
-		return fmt.Errorf("could not start client: %v", err)
+		return err
 	}
-	clientStarted = true
-
+	clientCmd = cmd
+	time.Sleep(2 * time.Second) // Allow time for initialization
 	return nil
 }
 
-// Step definition to verify the client successfully subscribed
+// theClientShouldSuccessfullySubscribeToTheService checks that the client subscribed successfully.
 func theClientShouldSuccessfullySubscribeToTheService() error {
-	if !clientStarted {
-		return fmt.Errorf("client has not started")
+	if !bytes.Contains(clientOutput.Bytes(), []byte("SUBSCRIBE ACK")) {
+		return fmt.Errorf("subscription not successful: %s", clientOutput.String())
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	done := make(chan error)
-	go func() {
-		for {
-			if strings.Contains(clientOutputBuffer.String(), expectedOutput) {
-				subscriptionSuccessful = true
-				done <- nil
-				return
-			}
-			time.Sleep(1 * time.Second)
-		}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("timeout reached: client did not successfully subscribe")
-	case err := <-done:
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
-// Step definition to set the expected confirmation message
-func theClientShouldReceiveAConfirmationMessage(message string) error {
-	expectedOutput = strings.TrimSpace(message)
-	actualOutput := strings.TrimSpace(clientOutputBuffer.String())
-
-	// Print the actual outputs for debugging
-	fmt.Println("Routing Manager Output:\n", routingManagerOutputBuffer.String())
-	fmt.Println("Service Output:\n", serviceOutputBuffer.String())
-	fmt.Println("Client Output:\n", actualOutput)
-
-	// Compare the expected message with the actual output
-	if !strings.Contains(actualOutput, expectedOutput) {
-		return fmt.Errorf("expected output %q not found in client output", expectedOutput)
+// theClientShouldReceiveAConfirmationMessage checks that the client received the expected message.
+func theClientShouldReceiveAConfirmationMessage(expectedMessage string) error {
+	if !bytes.Contains(clientOutput.Bytes(), []byte(expectedMessage)) {
+		return fmt.Errorf("expected output \"%s\" not found in client output", expectedMessage)
 	}
-
 	return nil
 }
 
-// Teardown function to stop the client, service, and routing manager
+// teardown stops all running processes.
 func teardown() {
+	fmt.Println("Running teardown...")
+
 	if clientCmd != nil {
 		fmt.Println("Stopping client...")
 		clientCmd.Process.Kill()
@@ -157,14 +108,9 @@ func teardown() {
 		routingManagerCmd.Wait()
 		fmt.Println("Routing manager stopped.")
 	}
-
-	// Manually clean up Unix domain sockets
-	fmt.Println("Cleaning up Unix domain sockets...")
-	os.Remove("/tmp/vsomeip-0")
-	os.Remove("/tmp/vsomeip-*")
 }
 
-// InitializeScenario registers the step definitions with the Godog framework
+// InitializeScenario registers the step definitions with the Godog framework.
 func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the routingmanagerd is running$`, theRoutingManagerIsRunning)
 	ctx.Step(`^the service is running$`, theServiceIsRunning)
@@ -173,24 +119,32 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the client should receive a confirmation message "([^"]*)"$`, theClientShouldReceiveAConfirmationMessage)
 }
 
-// Test function that runs the Godog test suite using Go's testing framework
+// TestFeatures runs the Godog test suite using Go's testing framework.
 func TestFeatures(t *testing.T) {
-	cwd, _ := os.Getwd()
+	// Print the current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current working directory: %v", err)
+	}
 	fmt.Println("Current working directory:", cwd)
 
+	// Set Godog options
 	opts := godog.Options{
 		Format: "pretty",
-		Paths:  []string{"./client.feature"}, // Path relative to the test directory
+		Paths:  []string{"./client.feature"},
 	}
 
+	// Run the Godog test suite
 	status := godog.TestSuite{
 		Name:                "godogs",
 		ScenarioInitializer: InitializeScenario,
 		Options:             &opts,
 	}.Run()
 
-	teardown() // Manually call teardown to ensure all processes are stopped
+	// Call teardown after tests
+	teardown()
 
+	// Fail the test if the test suite did not complete successfully
 	if status != 0 {
 		t.Fatalf("non-zero status returned, failed to run feature tests")
 	}
