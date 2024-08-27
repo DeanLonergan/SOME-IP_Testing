@@ -6,3 +6,7 @@ build/*
 
 # Ignore the entire .vscode folder
 .vscode/
+
+# Ignore Go module files
+go.mod
+go.sum
