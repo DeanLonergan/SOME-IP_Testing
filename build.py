@@ -53,7 +53,7 @@ def main():
         print(f"\nBuilding component: {component}")
         run_cmake_and_make(component_build_dir, source_dir)
 
-    print("Build process finished.")
+    print("Build process finished.\n")
 
 if __name__ == "__main__":
     main()
