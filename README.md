@@ -14,7 +14,7 @@ Assuming [vsomeip](https://github.com/COVESA/vsomeip) and [Go](https://go.dev/do
 
 Building the project:
 ```
-git clone git@git-gdd.sdo.jlrmotor.com:ONE/feature-config/someip-test.git
+git clone git@github.com:DeanLonergan/SOME-IP_Testing.git
 cd someip-test
 python3 build.py
 ```
